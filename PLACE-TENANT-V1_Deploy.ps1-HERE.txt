@@ -1,0 +1,10 @@
+PLACEHOLDER - ACTION REQUIRED BEFORE DEPLOYMENT
+
+Generate V1_Deploy.ps1 from the customer tenant Vision One console:
+  Endpoint Security > Endpoint Inventory > Agent Installer > Windows > Deployment Script
+  (Standard Endpoint Protection must be included - agent group tied to a Protection Manager)
+
+Save it as V1_Deploy.ps1 in this folder, next to V1_Migrate.bat.
+Recommended: change $MAX_RETRY = 30 to 120 in the "Check SEP is installed" section.
+
+See README.md and docs\V1_Migration_MSP_Deployment_Guide.docx for details.
