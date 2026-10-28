@@ -50,6 +50,12 @@ Vision One tenant. **For every customer tenant, generate a fresh script:**
    V1_Migrate.bat        (CMD)
    .\V1_Migrate.bat      (PowerShell)
    ```
+   To validate without making changes, run with `--dry-run`:
+   ```
+   V1_Migrate.bat --dry-run
+   ```
+   This walks through all steps, logs what *would* happen, and exits — no
+   services stopped, no reboots, no installs.
 3. Walk away. **The machine restarts automatically** — once after WFBS removal
    (30-second warning), and a second time only if .NET 3.5 had to be installed.
    The script resumes on its own (Scheduled Task `V1Migration`, SYSTEM, at startup).
