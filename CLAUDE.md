@@ -34,7 +34,7 @@ Post-reboot persistence uses Scheduled Task `V1Migration` running at SYSTEM priv
 
 - **Batch subroutines:** `:label` blocks called via `call :subroutine`
 - **Delayed expansion:** `setlocal EnableDelayedExpansion` for variable expansion in loops
-- **Logging:** Native timestamp format `[%date:~10,4%-%date:~4,2%-%date:~7,2% %time:~0,8%]`, dual output to summary and verbose log files
+- **Logging:** Locale-independent timestamps via `wmic os get localdatetime`, dual output to summary and verbose log files
 - **Error handling:** Explicit `%errorlevel%` checks, special DISM 3010 handling, 60-min SCUT watchdog with `taskkill`
 - **PowerShell integration:** `Unblock-File`, `Get-WindowsOptionalFeature`, `Resolve-DnsName` — inbox cmdlets only, no module dependencies
 - **PS 5.1 compatibility required:** No PowerShell 7+ syntax (ternary operators, etc.)
@@ -48,9 +48,18 @@ Post-reboot persistence uses Scheduled Task `V1Migration` running at SYSTEM priv
 | SCUT output | `C:\Windows\Temp\V1Deploy\Logs\scut_output.log` |
 | Deployment transcript | `%APPDATA%\Trend Micro\V1ES\v1es_install.log` |
 
+## Dry-Run Mode
+
+Run `V1_Migrate.bat --dry-run` to walk through the full migration flow without making any changes. It:
+- Shows all 8 progress steps with the visual progress bar
+- Logs `[DRY-RUN] Would: ...` for every destructive operation (service stops, SCUT, registry, reboot, deployment)
+- Skips Phase 1 reboot and falls through to Phase 2 so the entire flow is visible in one run
+- Simulates a successful deployment (exit 0) to exercise the completion path
+- Requires Administrator (self-elevation passes `--dry-run` through)
+
 ## Testing
 
-No automated tests. Validate in a lab environment with a Worry-Free tenant and a Vision One tenant. Monitor live with:
+No automated tests. Use `--dry-run` to validate script flow without a lab. For full end-to-end testing, use a lab VM with a Worry-Free tenant and a Vision One tenant. Monitor live with:
 ```powershell
 Get-Content C:\Windows\Temp\V1Deploy\Logs\migration.log -Tail 5 -Wait
 ```
