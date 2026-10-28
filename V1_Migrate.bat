@@ -2,7 +2,9 @@
 setlocal EnableDelayedExpansion
 
 :: -- CONFIGURATION ---------------------------------------------------------
-set "scriptVer=1.1"
+set "scriptVer=1.2"
+set "dryRun=0"
+if /i "%~1"=="--dry-run" set "dryRun=1"
 :: srcSCUT: WFBS folder bundled alongside this script (contains SCUT.exe + EndpointBasecamp.exe)
 set "srcSCUT=%~dp0WFBS"
 set "stageDir=C:\Windows\Temp\V1Deploy"
@@ -18,7 +20,7 @@ set "maxRetries=3"
 :: -- SELF-ELEVATE ----------------------------------------------------------
 net session >nul 2>&1 || (
     echo [WARN] Not admin. Elevating...
-    powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    powershell -Command "Start-Process -FilePath '%~f0' -ArgumentList '%*' -Verb RunAs"
     exit /b
 )
 
@@ -40,12 +42,20 @@ goto :main
 
 :: :persist - register script for post-reboot resume via Scheduled Task (SYSTEM, fires at startup)
 :persist
+    if !dryRun! equ 1 (
+        call :log "DRY-RUN" "Would create Scheduled Task 'V1Migration' (SYSTEM, ONSTART)"
+        goto :eof
+    )
     schtasks /create /tn "V1Migration" /tr "cmd.exe /c \"%~f0\"" /sc ONSTART /ru SYSTEM /rl HIGHEST /f >nul 2>&1
     call :log "INFO" "Scheduled Task 'V1Migration' set for post-reboot resume."
     goto :eof
 
 :: :unpersist - remove the scheduled task when no longer needed
 :unpersist
+    if !dryRun! equ 1 (
+        call :log "DRY-RUN" "Would delete Scheduled Task 'V1Migration'"
+        goto :eof
+    )
     schtasks /delete /tn "V1Migration" /f >nul 2>&1
     goto :eof
 
@@ -75,6 +85,7 @@ goto :main
 call :log "INFO" "========================================================"
 call :log "INFO" "V1 Migration v%scriptVer%  |  Host: %COMPUTERNAME%  |  User: %USERNAME%"
 for /f "delims=" %%v in ('ver') do call :log "INFO" "OS: %%v"
+if !dryRun! equ 1 call :log "INFO" "*** DRY-RUN MODE - no changes will be made ***"
 call :log "INFO" "========================================================"
 
 :: -- PRE-PHASE: .NET 3.5 --------------------------------------------------
@@ -89,6 +100,11 @@ if %errorlevel% equ 0 (
 )
 
 call :log "WARN" ".NET 3.5 not enabled - installing via DISM..."
+if !dryRun! equ 1 (
+    call :log "DRY-RUN" "Would run: dism.exe /Online /Enable-Feature /FeatureName:NetFx3 /All /NoRestart"
+    call :log "DRY-RUN" "Would reboot if DISM returns 3010"
+    goto :phase1
+)
 dism.exe /Online /Enable-Feature /FeatureName:NetFx3 /All /NoRestart >>"%verbLog%" 2>&1
 set "_rc=%errorlevel%"
 
@@ -126,6 +142,18 @@ if %errorlevel% neq 0 (
 
 call :status 2 "Staging SCUT removal tool"
 call :log "INFO" "ntrtscan detected. Starting WFBS-SVC removal..."
+
+if !dryRun! equ 1 (
+    call :log "DRY-RUN" "Would stage SCUT files to %stageDir%\SCUT\"
+    call :status 3 "Stopping WFBS protection services"
+    call :log "DRY-RUN" "Would stop services: TMiCRCScanService, TmPfw, TmPreFilter, VSApiNt, TmCCSF"
+    call :status 4 "Running SCUT removal (20-35 min typical)"
+    call :log "DRY-RUN" "Would run SCUT -noinstall with 60-min watchdog"
+    call :status 5 "Verifying WFBS removal"
+    call :log "DRY-RUN" "Would poll for WFBS service/directory removal (max 300s)"
+    goto :scutDone
+)
+
 if not exist "%stageDir%" mkdir "%stageDir%"
 
 xcopy /E /I /Y "%srcSCUT%" "%stageDir%\SCUT\" >>"%verbLog%" 2>&1
@@ -232,6 +260,11 @@ set "_waitCount=0"
 :: Only WFBS-specific keys are removed - Basecamp/V1 keys (TMSecurityService,
 :: cep, V1ES, Falcon, Kestrel, NetFilter, etc.) are untouched.
 call :status 6 "Cleaning WFBS registry remnants"
+if !dryRun! equ 1 (
+    call :log "DRY-RUN" "Would delete registry keys: PC-cillinNTCorp, OfficeScan, OSCEUpdater, WFBSSUpdater"
+    call :log "DRY-RUN" "Would reboot in 30s - continuing to Phase 2 instead"
+    goto :phase2
+)
 call :log "INFO" "Removing WFBS registry remnants..."
 for %%k in (PC-cillinNTCorp OfficeScan OSCEUpdater WFBSSUpdater) do (
     reg delete "HKLM\SOFTWARE\WOW6432Node\TrendMicro\%%k" /f >nul 2>&1
@@ -299,20 +332,28 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 if exist "C:\Program Files (x86)\Trend Micro\Security Agent" (
-    call :log "WARN" "Leftover Security Agent directory found - attempting delete..."
-    rmdir /s /q "C:\Program Files (x86)\Trend Micro\Security Agent" >nul 2>&1
-    if exist "C:\Program Files (x86)\Trend Micro\Security Agent" (
-        call :log "ERROR" "FATAL: Could not delete Security Agent directory (locked files). Reboot, delete it manually, then re-run this script."
-        exit /b 1
+    if !dryRun! equ 1 (
+        call :log "DRY-RUN" "Would delete leftover Security Agent directory"
+    ) else (
+        call :log "WARN" "Leftover Security Agent directory found - attempting delete..."
+        rmdir /s /q "C:\Program Files (x86)\Trend Micro\Security Agent" >nul 2>&1
+        if exist "C:\Program Files (x86)\Trend Micro\Security Agent" (
+            call :log "ERROR" "FATAL: Could not delete Security Agent directory (locked files). Reboot, delete it manually, then re-run this script."
+            exit /b 1
+        )
+        call :log "INFO" "Leftover directory deleted."
     )
-    call :log "INFO" "Leftover directory deleted."
 )
 
 :: Delete WFBS registry remnants (blocks "Worry Free agent detected" compatibility error).
 :: Runs post-reboot too, so remnants are cleared even if Phase 1 ran before this fix.
-for %%k in (PC-cillinNTCorp OfficeScan OSCEUpdater WFBSSUpdater) do (
-    reg delete "HKLM\SOFTWARE\WOW6432Node\TrendMicro\%%k" /f >nul 2>&1
-    reg delete "HKLM\SOFTWARE\TrendMicro\%%k" /f >nul 2>&1
+if !dryRun! equ 1 (
+    call :log "DRY-RUN" "Would delete WFBS registry remnants"
+) else (
+    for %%k in (PC-cillinNTCorp OfficeScan OSCEUpdater WFBSSUpdater) do (
+        reg delete "HKLM\SOFTWARE\WOW6432Node\TrendMicro\%%k" /f >nul 2>&1
+        reg delete "HKLM\SOFTWARE\TrendMicro\%%k" /f >nul 2>&1
+    )
 )
 
 :: Post-reboot this runs at system startup - the network stack may not be up
@@ -340,8 +381,15 @@ set "_netWait=0"
 
 title V1 Migration [7/8] Installing SEP (this may take 10-20 min)...
 call :log "INFO" "Running V1 deployment script (downloads installer, installs SEP, waits for services)..."
+if !dryRun! equ 1 (
+    call :log "DRY-RUN" "Would run: powershell -File V1_Deploy.ps1"
+    call :log "DRY-RUN" "Simulating successful deployment (exit 0)"
+    set "_installerExit=0"
+    goto :deployDone
+)
 powershell -NoProfile -ExecutionPolicy Bypass -File "%deployPs1%" >>"%verbLog%" 2>&1
 set "_installerExit=%errorlevel%"
+:deployDone
 call :log "INFO" "Deployment script exited: %_installerExit%"
 
 if %_installerExit% equ 0 (
@@ -366,10 +414,14 @@ if %_installerExit% equ 0 (
 
 :cleanup
 call :unpersist
-del /f /q "%rebootFlag%" "%dotnetFlag%" "%retryFile%" 2>nul
-:: Clean staged SCUT files (keep logs)
-if exist "%stageDir%\SCUT" rmdir /s /q "%stageDir%\SCUT" >nul 2>&1
-del /f /q "%stageDir%\scut_run.cmd" "%stageDir%\scut.exit" 2>nul
+if !dryRun! equ 1 (
+    call :log "DRY-RUN" "Would delete flag files and staged SCUT files"
+) else (
+    del /f /q "%rebootFlag%" "%dotnetFlag%" "%retryFile%" 2>nul
+    :: Clean staged SCUT files (keep logs)
+    if exist "%stageDir%\SCUT" rmdir /s /q "%stageDir%\SCUT" >nul 2>&1
+    del /f /q "%stageDir%\scut_run.cmd" "%stageDir%\scut.exit" 2>nul
+)
 
 title V1 Migration - Complete
 call :log "INFO" "========================================================"
