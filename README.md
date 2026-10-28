@@ -12,11 +12,19 @@ WF_migration\
 ├── V1_Migrate.bat      Main script - run this (as Administrator)
 ├── V1_Deploy.ps1       V1 deployment script (TENANT-SPECIFIC - see below)
 ├── WFBS\
-│   ├── SCUT.exe        WFBS removal tool (SCUT)
+│   ├── SCUT.exe        WFBS removal tool (SCUT) - EXPIRES MONTHLY
 │   └── SCUT.exe.config
 ├── docs\               Deployment / test guides
 └── archive\            Unused legacy files (safe to delete)
 ```
+
+## IMPORTANT: SCUT.exe expires monthly
+
+The bundled `WFBS\SCUT.exe` has a **monthly expiry**. An expired SCUT will
+fail silently or return a non-zero exit code. Before each migration batch,
+download a fresh copy from the
+[Trend Micro Partner Portal](https://partner.trendmicro.com) and replace
+`WFBS\SCUT.exe` in this folder. Keep `SCUT.exe.config` as-is.
 
 ## IMPORTANT: V1_Deploy.ps1 is tenant-specific
 
@@ -86,6 +94,9 @@ endpoint (cloud VMs with VPC resolvers may need a public secondary DNS).
 
 ## Troubleshooting
 
+- **SCUT fails or exits non-zero immediately** - SCUT.exe has likely expired.
+  Download a fresh copy from the [Partner Portal](https://partner.trendmicro.com)
+  and replace `WFBS\SCUT.exe`.
 - **"FATAL: WFBS remnants detected / ntrtscan service present"** - SCUT did not
   finish. Re-run the bat; if it repeats, run `WFBS\SCUT.exe -noinstall`
   manually and check `ComUnist.log`.

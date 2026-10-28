@@ -22,7 +22,7 @@ Post-reboot persistence uses Scheduled Task `V1Migration` running at SYSTEM priv
 
 - `V1_Migrate.bat` — Main orchestration script (~303 lines, batch)
 - `V1_Deploy.ps1` — Tenant-specific deployment script (generated per-customer from Vision One console, **not committed with real tokens**)
-- `WFBS/SCUT.exe` — Binary tool for WFBS removal (PE32 .NET assembly)
+- `WFBS/SCUT.exe` — Binary tool for WFBS removal (PE32 .NET assembly, **expires monthly** — download fresh from Partner Portal before each migration batch)
 - `WFBS/SCUT.exe.config` — .NET runtime config (v2/v4 support)
 
 ## Customization Points
